@@ -1,6 +1,4 @@
-package graph
-
-//go:generate go run github.com/99designs/gqlgen
+package resolver
 
 import "github.com/nguyenvd27/graphql-test/graph/model"
 
