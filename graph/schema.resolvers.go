@@ -41,8 +41,26 @@ func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
 	return r.todos, nil
 }
 
+func (r *queryResolver) Todo(ctx context.Context, id string) (*model.Todo, error) {
+	for i := 0; i < len(r.todos); i++ {
+		if id == r.todos[i].ID {
+			return r.todos[i], nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *queryResolver) Events(ctx context.Context) ([]*model.Event, error) {
 	return r.events, nil
+}
+
+func (r *queryResolver) Event(ctx context.Context, id string) (*model.Event, error) {
+	for i := 0; i < len(r.events); i++ {
+		if id == r.events[i].ID {
+			return r.events[i], nil
+		}
+	}
+	return nil, nil
 }
 
 func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (*model.User, error) {
