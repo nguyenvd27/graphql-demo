@@ -9,35 +9,36 @@ import (
 	"math/rand"
 
 	"github.com/nguyenvd27/graphql-test/graph/generated"
-	"github.com/nguyenvd27/graphql-test/graph/model"
+	graphqlmodel "github.com/nguyenvd27/graphql-test/graph/model"
+	"github.com/nguyenvd27/graphql-test/model"
 )
 
 func (r *eventResolver) User(ctx context.Context, obj *model.Event) (*model.User, error) {
 	return &model.User{ID: obj.UserID, Name: "event user " + obj.UserID}, nil
 }
 
-func (r *mutationResolver) CreateEvent(ctx context.Context, input model.NewEvent) (*model.Event, error) {
-	event := &model.Event{
-		Title:   input.Title,
-		Content: input.Content,
-		ID:      fmt.Sprintf("T%d", rand.Int()),
-		UserID:  input.UserID,
+func (r *mutationResolver) CreateEvent(ctx context.Context, input graphqlmodel.NewEvent) (*model.Event, error) {
+	newEvent, err := r.Interactor.EventUsecase().CreateEventUsecase(fmt.Sprintf("T%d", rand.Int()), input.Title, input.Content, input.UserID)
+	if err != nil {
+		return nil, err
 	}
-	r.events = append(r.events, event)
-	return event, nil
+	return newEvent, nil
 }
 
 func (r *queryResolver) Events(ctx context.Context) ([]*model.Event, error) {
-	return r.events, nil
+	events, err := r.Interactor.EventUsecase().GetAllEventsUsecase()
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 func (r *queryResolver) Event(ctx context.Context, id string) (*model.Event, error) {
-	for i := 0; i < len(r.events); i++ {
-		if id == r.events[i].ID {
-			return r.events[i], nil
-		}
+	event, err := r.Interactor.EventUsecase().GetAEventUsecase(id)
+	if err != nil {
+		return nil, err
 	}
-	return nil, nil
+	return event, nil
 }
 
 // Event returns generated.EventResolver implementation.

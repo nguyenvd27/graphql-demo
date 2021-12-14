@@ -1,4 +1,4 @@
-package model
+package graphqlmodel
 
 type Event struct {
 	ID      string `json:"id"`

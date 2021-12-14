@@ -4,7 +4,7 @@ extend type Query {
 }
 
 extend type Mutation {
-  createEvent(input: NewEvent!): Event!
+  createEvent(input: NewEvent!): Event! @needAuthentication
 }
 
 input NewEvent {

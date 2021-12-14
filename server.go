@@ -7,8 +7,11 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/nguyenvd27/graphql-test/graph/directive"
 	"github.com/nguyenvd27/graphql-test/graph/generated"
 	"github.com/nguyenvd27/graphql-test/graph/resolver"
+	"github.com/nguyenvd27/graphql-test/initialize/db"
+	"github.com/nguyenvd27/graphql-test/interactor"
 )
 
 const defaultPort = "8080"
@@ -19,7 +22,19 @@ func main() {
 		port = defaultPort
 	}
 
-	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{Resolvers: &resolver.Resolver{}}))
+	gormDB := db.Initialize()
+	reg := interactor.NewRegistry(gormDB)
+	initInteractor := interactor.NewInteractor(reg)
+
+	config := generated.Config{
+		Resolvers: &resolver.Resolver{
+			Interactor: initInteractor,
+		},
+	}
+	config.Directives.NeedAuthentication = directive.GenerateNeedAuthenticationDirective()
+	config.Directives.NeedRole = directive.GenerateNeedRoleDirective()
+
+	srv := handler.NewDefaultServer(generated.NewExecutableSchema(config))
 
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/query", srv)

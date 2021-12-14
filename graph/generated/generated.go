@@ -6,13 +6,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
-	"github.com/nguyenvd27/graphql-test/graph/model"
+	graphqlmodel "github.com/nguyenvd27/graphql-test/graph/model"
+	"github.com/nguyenvd27/graphql-test/model"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -42,6 +44,8 @@ type ResolverRoot interface {
 }
 
 type DirectiveRoot struct {
+	NeedAuthentication func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error)
+	NeedRole           func(ctx context.Context, obj interface{}, next graphql.Resolver, role graphqlmodel.Role) (res interface{}, err error)
 }
 
 type ComplexityRoot struct {
@@ -53,8 +57,8 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CreateEvent func(childComplexity int, input model.NewEvent) int
-		CreateTodo  func(childComplexity int, input model.NewTodo) int
+		CreateEvent func(childComplexity int, input graphqlmodel.NewEvent) int
+		CreateTodo  func(childComplexity int, input graphqlmodel.NewTodo) int
 	}
 
 	Query struct {
@@ -81,8 +85,8 @@ type EventResolver interface {
 	User(ctx context.Context, obj *model.Event) (*model.User, error)
 }
 type MutationResolver interface {
-	CreateEvent(ctx context.Context, input model.NewEvent) (*model.Event, error)
-	CreateTodo(ctx context.Context, input model.NewTodo) (*model.Todo, error)
+	CreateEvent(ctx context.Context, input graphqlmodel.NewEvent) (*model.Event, error)
+	CreateTodo(ctx context.Context, input graphqlmodel.NewTodo) (*model.Todo, error)
 }
 type QueryResolver interface {
 	Events(ctx context.Context) ([]*model.Event, error)
@@ -147,7 +151,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateEvent(childComplexity, args["input"].(model.NewEvent)), true
+		return e.complexity.Mutation.CreateEvent(childComplexity, args["input"].(graphqlmodel.NewEvent)), true
 
 	case "Mutation.createTodo":
 		if e.complexity.Mutation.CreateTodo == nil {
@@ -159,7 +163,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateTodo(childComplexity, args["input"].(model.NewTodo)), true
+		return e.complexity.Mutation.CreateTodo(childComplexity, args["input"].(graphqlmodel.NewTodo)), true
 
 	case "Query.event":
 		if e.complexity.Query.Event == nil {
@@ -311,7 +315,7 @@ var sources = []*ast.Source{
 }
 
 extend type Mutation {
-  createEvent(input: NewEvent!): Event!
+  createEvent(input: NewEvent!): Event! @needAuthentication
 }
 
 input NewEvent {
@@ -335,14 +339,22 @@ type Query
 """
 Root Mutation
 """
-type Mutation`, BuiltIn: false},
+type Mutation
+
+directive @needAuthentication on FIELD_DEFINITION
+directive @needRole(role: Role!) on FIELD_DEFINITION
+
+enum Role {
+  ADMIN
+  USER
+}`, BuiltIn: false},
 	{Name: "graph/schema/todo.graphql", Input: `extend type Query {
   todos: [Todo!]!
   todo(id: ID!): Todo!
 }
 
 extend type Mutation {
-  createTodo(input: NewTodo!): Todo!
+  createTodo(input: NewTodo!): Todo! @needRole(role: ADMIN)
 }
 
 input NewTodo {
@@ -368,10 +380,25 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) dir_needRole_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 graphqlmodel.Role
+	if tmp, ok := rawArgs["role"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+		arg0, err = ec.unmarshalNRole2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐRole(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["role"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createEvent_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 model.NewEvent
+	var arg0 graphqlmodel.NewEvent
 	if tmp, ok := rawArgs["input"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 		arg0, err = ec.unmarshalNNewEvent2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐNewEvent(ctx, tmp)
@@ -386,7 +413,7 @@ func (ec *executionContext) field_Mutation_createEvent_args(ctx context.Context,
 func (ec *executionContext) field_Mutation_createTodo_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 model.NewTodo
+	var arg0 graphqlmodel.NewTodo
 	if tmp, ok := rawArgs["input"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 		arg0, err = ec.unmarshalNNewTodo2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐNewTodo(ctx, tmp)
@@ -618,7 +645,7 @@ func (ec *executionContext) _Event_user(ctx context.Context, field graphql.Colle
 	}
 	res := resTmp.(*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Mutation_createEvent(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -645,8 +672,28 @@ func (ec *executionContext) _Mutation_createEvent(ctx context.Context, field gra
 	}
 	fc.Args = args
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().CreateEvent(rctx, args["input"].(model.NewEvent))
+		directive0 := func(rctx context.Context) (interface{}, error) {
+			ctx = rctx // use context from middleware stack in children
+			return ec.resolvers.Mutation().CreateEvent(rctx, args["input"].(graphqlmodel.NewEvent))
+		}
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.NeedAuthentication == nil {
+				return nil, errors.New("directive needAuthentication is not implemented")
+			}
+			return ec.directives.NeedAuthentication(ctx, nil, directive0)
+		}
+
+		tmp, err := directive1(rctx)
+		if err != nil {
+			return nil, graphql.ErrorOnPath(ctx, err)
+		}
+		if tmp == nil {
+			return nil, nil
+		}
+		if data, ok := tmp.(*model.Event); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf(`unexpected type %T from directive, should be *github.com/nguyenvd27/graphql-test/model.Event`, tmp)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -660,7 +707,7 @@ func (ec *executionContext) _Mutation_createEvent(ctx context.Context, field gra
 	}
 	res := resTmp.(*model.Event)
 	fc.Result = res
-	return ec.marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEvent(ctx, field.Selections, res)
+	return ec.marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEvent(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Mutation_createTodo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -687,8 +734,32 @@ func (ec *executionContext) _Mutation_createTodo(ctx context.Context, field grap
 	}
 	fc.Args = args
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().CreateTodo(rctx, args["input"].(model.NewTodo))
+		directive0 := func(rctx context.Context) (interface{}, error) {
+			ctx = rctx // use context from middleware stack in children
+			return ec.resolvers.Mutation().CreateTodo(rctx, args["input"].(graphqlmodel.NewTodo))
+		}
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			role, err := ec.unmarshalNRole2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐRole(ctx, "ADMIN")
+			if err != nil {
+				return nil, err
+			}
+			if ec.directives.NeedRole == nil {
+				return nil, errors.New("directive needRole is not implemented")
+			}
+			return ec.directives.NeedRole(ctx, nil, directive0, role)
+		}
+
+		tmp, err := directive1(rctx)
+		if err != nil {
+			return nil, graphql.ErrorOnPath(ctx, err)
+		}
+		if tmp == nil {
+			return nil, nil
+		}
+		if data, ok := tmp.(*model.Todo); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf(`unexpected type %T from directive, should be *github.com/nguyenvd27/graphql-test/model.Todo`, tmp)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -702,7 +773,7 @@ func (ec *executionContext) _Mutation_createTodo(ctx context.Context, field grap
 	}
 	res := resTmp.(*model.Todo)
 	fc.Result = res
-	return ec.marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodo(ctx, field.Selections, res)
+	return ec.marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodo(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_events(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -737,7 +808,7 @@ func (ec *executionContext) _Query_events(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.([]*model.Event)
 	fc.Result = res
-	return ec.marshalNEvent2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEventᚄ(ctx, field.Selections, res)
+	return ec.marshalNEvent2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEventᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_event(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -779,7 +850,7 @@ func (ec *executionContext) _Query_event(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.(*model.Event)
 	fc.Result = res
-	return ec.marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEvent(ctx, field.Selections, res)
+	return ec.marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEvent(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_todos(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -814,7 +885,7 @@ func (ec *executionContext) _Query_todos(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.([]*model.Todo)
 	fc.Result = res
-	return ec.marshalNTodo2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodoᚄ(ctx, field.Selections, res)
+	return ec.marshalNTodo2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodoᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_todo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -856,7 +927,7 @@ func (ec *executionContext) _Query_todo(ctx context.Context, field graphql.Colle
 	}
 	res := resTmp.(*model.Todo)
 	fc.Result = res
-	return ec.marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodo(ctx, field.Selections, res)
+	return ec.marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodo(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -1067,7 +1138,7 @@ func (ec *executionContext) _Todo_user(ctx context.Context, field graphql.Collec
 	}
 	res := resTmp.(*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _User_id(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
@@ -2262,8 +2333,8 @@ func (ec *executionContext) ___Type_ofType(ctx context.Context, field graphql.Co
 
 // region    **************************** input.gotpl *****************************
 
-func (ec *executionContext) unmarshalInputNewEvent(ctx context.Context, obj interface{}) (model.NewEvent, error) {
-	var it model.NewEvent
+func (ec *executionContext) unmarshalInputNewEvent(ctx context.Context, obj interface{}) (graphqlmodel.NewEvent, error) {
+	var it graphqlmodel.NewEvent
 	asMap := map[string]interface{}{}
 	for k, v := range obj.(map[string]interface{}) {
 		asMap[k] = v
@@ -2301,8 +2372,8 @@ func (ec *executionContext) unmarshalInputNewEvent(ctx context.Context, obj inte
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputNewTodo(ctx context.Context, obj interface{}) (model.NewTodo, error) {
-	var it model.NewTodo
+func (ec *executionContext) unmarshalInputNewTodo(ctx context.Context, obj interface{}) (graphqlmodel.NewTodo, error) {
+	var it graphqlmodel.NewTodo
 	asMap := map[string]interface{}{}
 	for k, v := range obj.(map[string]interface{}) {
 		asMap[k] = v
@@ -2861,11 +2932,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) marshalNEvent2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEvent(ctx context.Context, sel ast.SelectionSet, v model.Event) graphql.Marshaler {
+func (ec *executionContext) marshalNEvent2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEvent(ctx context.Context, sel ast.SelectionSet, v model.Event) graphql.Marshaler {
 	return ec._Event(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNEvent2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Event) graphql.Marshaler {
+func (ec *executionContext) marshalNEvent2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Event) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -2889,7 +2960,7 @@ func (ec *executionContext) marshalNEvent2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgrap
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEvent(ctx, sel, v[i])
+			ret[i] = ec.marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEvent(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -2909,7 +2980,7 @@ func (ec *executionContext) marshalNEvent2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgrap
 	return ret
 }
 
-func (ec *executionContext) marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐEvent(ctx context.Context, sel ast.SelectionSet, v *model.Event) graphql.Marshaler {
+func (ec *executionContext) marshalNEvent2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐEvent(ctx context.Context, sel ast.SelectionSet, v *model.Event) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "must not be null")
@@ -2934,14 +3005,24 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
-func (ec *executionContext) unmarshalNNewEvent2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐNewEvent(ctx context.Context, v interface{}) (model.NewEvent, error) {
+func (ec *executionContext) unmarshalNNewEvent2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐNewEvent(ctx context.Context, v interface{}) (graphqlmodel.NewEvent, error) {
 	res, err := ec.unmarshalInputNewEvent(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNNewTodo2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐNewTodo(ctx context.Context, v interface{}) (model.NewTodo, error) {
+func (ec *executionContext) unmarshalNNewTodo2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐNewTodo(ctx context.Context, v interface{}) (graphqlmodel.NewTodo, error) {
 	res, err := ec.unmarshalInputNewTodo(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNRole2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐRole(ctx context.Context, v interface{}) (graphqlmodel.Role, error) {
+	var res graphqlmodel.Role
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRole2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐRole(ctx context.Context, sel ast.SelectionSet, v graphqlmodel.Role) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v interface{}) (string, error) {
@@ -2959,11 +3040,11 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 	return res
 }
 
-func (ec *executionContext) marshalNTodo2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v model.Todo) graphql.Marshaler {
+func (ec *executionContext) marshalNTodo2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v model.Todo) graphql.Marshaler {
 	return ec._Todo(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTodo2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodoᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Todo) graphql.Marshaler {
+func (ec *executionContext) marshalNTodo2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodoᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Todo) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -2987,7 +3068,7 @@ func (ec *executionContext) marshalNTodo2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraph
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodo(ctx, sel, v[i])
+			ret[i] = ec.marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodo(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -3007,7 +3088,7 @@ func (ec *executionContext) marshalNTodo2ᚕᚖgithubᚗcomᚋnguyenvd27ᚋgraph
 	return ret
 }
 
-func (ec *executionContext) marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v *model.Todo) graphql.Marshaler {
+func (ec *executionContext) marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v *model.Todo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "must not be null")
@@ -3017,11 +3098,11 @@ func (ec *executionContext) marshalNTodo2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphql�
 	return ec._Todo(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNUser2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v model.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2githubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v model.User) graphql.Marshaler {
 	return ec._User(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋnguyenvd27ᚋgraphqlᚑtestᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "must not be null")
