@@ -5,6 +5,8 @@ package resolver
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 
 	"github.com/nguyenvd27/graphql-test/graph/generated"
 	graphqlmodel "github.com/nguyenvd27/graphql-test/graph/model"
@@ -12,19 +14,31 @@ import (
 )
 
 func (r *mutationResolver) CreateTodo(ctx context.Context, input graphqlmodel.NewTodo) (*model.Todo, error) {
-	return &model.Todo{}, nil
+	newTodo, err := r.Interactor.TodoUsecase().CreateTodoUsecase(fmt.Sprintf("T%d", rand.Int()), input.Text, input.UserID, false)
+	if err != nil {
+		return nil, err
+	}
+	return newTodo, nil
 }
 
 func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
-	return []*model.Todo{}, nil
+	todos, err := r.Interactor.TodoUsecase().GetAllTodosUsecase()
+	if err != nil {
+		return nil, err
+	}
+	return todos, nil
 }
 
 func (r *queryResolver) Todo(ctx context.Context, id string) (*model.Todo, error) {
-	return &model.Todo{}, nil
+	todo, err := r.Interactor.TodoUsecase().GetATodoUsecase(id)
+	if err != nil {
+		return nil, err
+	}
+	return todo, nil
 }
 
 func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (*model.User, error) {
-	return &model.User{ID: obj.UserID, Name: "user " + obj.UserID}, nil
+	return &model.User{ID: obj.UserID, Name: "todo user " + obj.UserID}, nil
 }
 
 // Todo returns generated.TodoResolver implementation.

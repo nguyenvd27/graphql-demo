@@ -11,6 +11,7 @@ type registry struct {
 
 type Registry interface {
 	EventRepository() repository.Event
+	TodoRepository() repository.Todo
 }
 
 func NewRegistry(db *gorm.DB) Registry {
@@ -21,4 +22,8 @@ func NewRegistry(db *gorm.DB) Registry {
 
 func (r *registry) EventRepository() repository.Event {
 	return repository.NewEvent(r.db)
+}
+
+func (r *registry) TodoRepository() repository.Todo {
+	return repository.NewTodo(r.db)
 }

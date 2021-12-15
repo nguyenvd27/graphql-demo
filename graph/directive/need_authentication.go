@@ -13,7 +13,9 @@ type NeedAuthenticationDirective func(ctx context.Context, obj interface{}, next
 func GenerateNeedAuthenticationDirective() NeedAuthenticationDirective {
 	return func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error) {
 		fmt.Println("-----context: ", ctx)
-		if rand.Int()%2 == 0 {
+		random := rand.Int()
+		fmt.Println("random: ", random)
+		if random%2 == 0 {
 			return nil, fmt.Errorf("access denied")
 		}
 

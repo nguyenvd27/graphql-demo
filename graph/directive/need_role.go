@@ -15,7 +15,7 @@ func GenerateNeedRoleDirective() NeedRoleDirective {
 		fmt.Println("-----context: ", ctx)
 		fmt.Println("-----role: ", role)
 
-		if role.String() == "ADMIN" {
+		if role.String() != "ADMIN" {
 			return nil, fmt.Errorf("access denied")
 		}
 
